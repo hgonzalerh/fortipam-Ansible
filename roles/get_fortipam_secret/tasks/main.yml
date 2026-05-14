@@ -1,0 +1,63 @@
+---
+- name: Sanity-check required environment variables
+  ansible.builtin.assert:
+    that:
+      - fpam_instance | length > 0
+      - fpam_token | length > 0
+    fail_msg: "FORTIPAM_INSTANCE and FORTIPAM_TOKEN must be set in the environment or passed to the role"
+
+- name: Resolve secret name to ID
+  ansible.builtin.uri:
+    url: "{{ fpam_instance }}/api/v2/cmdb/secret/database?filter=name=={{ fpam_secret | urlencode }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ fpam_token }}"
+      Accept: "application/json"
+    validate_certs: "{{ not fpam_skip_tls_verify }}"
+    status_code: [200]
+  register: fpam_name_lookup
+  when: not (fpam_secret | string is match('^[0-9]+$'))
+  no_log: true
+
+- name: Validate name resolution returned exactly one match
+  ansible.builtin.assert:
+    that:
+      - fpam_name_lookup.json.results | length == 1
+    fail_msg: >-
+      Expected exactly one secret named '{{ fpam_secret }}',
+      got {{ fpam_name_lookup.json.results | length }}.
+  when: fpam_name_lookup is not skipped
+
+- name: Set resolved secret ID
+  ansible.builtin.set_fact:
+    fpam_secret_id: >-
+      {{
+        fpam_secret
+        if (fpam_secret | string is match('^[0-9]+$'))
+        else fpam_name_lookup.json.results[0].id
+      }}
+  no_log: true
+
+- name: Fetch full secret record
+  ansible.builtin.uri:
+    url: "{{ fpam_instance }}/api/v2/cmdb/secret/database/{{ fpam_secret_id }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ fpam_token }}"
+      Accept: "application/json"
+    validate_certs: "{{ not fpam_skip_tls_verify }}"
+    status_code: [200]
+  register: fpam_secret_record
+  no_log: true
+
+- name: Extract desired field from the field array
+  ansible.builtin.set_fact:
+    get_fortipam_secret_field_cleartext: >-
+      {{
+        (fpam_secret_record.json.results[0].field
+          | selectattr('name', 'equalto', get_fortipam_secret_secret_field)
+          | list).0.value
+      }}
+    get_fortipam_secret_full_array: "{{ fpam_secret_record.json.results[0].field }}"
+  no_log: true
+

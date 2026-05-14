@@ -1,0 +1,109 @@
+---
+# Fetch a FortiPAM secret using only ansible.builtin.uri, then apply the
+# retrieved username and password to all hosts in a pre-defined inventory
+# group via play-level vars.
+#
+# Required env vars on the controller:
+#   FORTIPAM_INSTANCE  e.g. https://pam.example.com:443
+#   FORTIPAM_TOKEN     API user's bearer token
+#
+# Required playbook vars (overridable with -e):
+#   fpam_secret        Numeric ID (e.g. "8") or name (e.g. "Hugo")
+#   target_group       Inventory group to apply credentials to in play 2
+
+- name: Fetch FortiPAM secret credentials
+  hosts: localhost
+  gather_facts: false
+  vars:
+    fpam_secret: "Hugo"
+    fpam_instance: "{{ lookup('env', 'FORTIPAM_INSTANCE') }}"
+    fpam_token: "{{ lookup('env', 'FORTIPAM_TOKEN') }}"
+    fpam_skip_tls_verify: true
+
+  tasks:
+    - name: Sanity-check required environment variables
+      ansible.builtin.assert:
+        that:
+          - fpam_instance | length > 0
+          - fpam_token | length > 0
+        fail_msg: "FORTIPAM_INSTANCE and FORTIPAM_TOKEN must be set in the environment"
+
+    - name: Resolve secret name to ID
+      ansible.builtin.uri:
+        url: "{{ fpam_instance }}/api/v2/cmdb/secret/database?filter=name=={{ fpam_secret | urlencode }}"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ fpam_token }}"
+          Accept: "application/json"
+        validate_certs: "{{ not fpam_skip_tls_verify }}"
+        status_code: [200]
+      register: fpam_name_lookup
+      when: not (fpam_secret | string is match('^[0-9]+$'))
+      no_log: true
+
+    - name: Validate name resolution returned exactly one match
+      ansible.builtin.assert:
+        that:
+          - fpam_name_lookup.json.results | length == 1
+        fail_msg: >-
+          Expected exactly one secret named '{{ fpam_secret }}',
+          got {{ fpam_name_lookup.json.results | length }}.
+      when: fpam_name_lookup is not skipped
+
+    - name: Set resolved secret ID
+      ansible.builtin.set_fact:
+        fpam_secret_id: >-
+          {{
+            fpam_secret
+            if (fpam_secret | string is match('^[0-9]+$'))
+            else fpam_name_lookup.json.results[0].id
+          }}
+      no_log: true
+
+    - name: Fetch full secret record
+      ansible.builtin.uri:
+        url: "{{ fpam_instance }}/api/v2/cmdb/secret/database/{{ fpam_secret_id }}"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ fpam_token }}"
+          Accept: "application/json"
+        validate_certs: "{{ not fpam_skip_tls_verify }}"
+        status_code: [200]
+      register: fpam_secret_record
+      no_log: true
+
+    - name: Extract Username and Password from the field array
+      ansible.builtin.set_fact:
+        fpam_username: >-
+          {{
+            (fpam_secret_record.json.results[0].field
+             | selectattr('name', 'equalto', 'Username')
+             | list).0.value
+          }}
+        fpam_password: >-
+          {{
+            (fpam_secret_record.json.results[0].field
+             | selectattr('name', 'equalto', 'Password')
+             | list).0.value
+          }}
+      no_log: true
+
+    - name: Extract Username and Password from the field array
+      ansible.builtin.debug:
+        msg: "{{ fpam_username}} and {{ fpam_password }}"
+
+- name: Apply FortiPAM-retrieved credentials to inventory targets
+  hosts: fpam_managed
+  gather_facts: false
+  vars:
+    ansible_user: "{{ hostvars['localhost'].fpam_username }}"
+    ansible_password: "{{ hostvars['localhost'].fpam_password }}"
+  tasks:
+    - name: Confirm we can run a command as the FortiPAM-stored user
+      ansible.builtin.command: id
+      register: id_out
+      changed_when: false
+
+    - name: Show the result
+      ansible.builtin.debug:
+        msg: "Connected to {{ inventory_hostname }} as: {{ id_out.stdout }}"

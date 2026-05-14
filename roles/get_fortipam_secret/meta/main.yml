@@ -1,0 +1,16 @@
+#SPDX-License-Identifier: MIT-0
+galaxy_info:
+  author: Hguo F. González
+  description: get secrets and fields from FortiPAM
+  company: Red Hat
+
+  license: MIT
+
+  min_ansible_version: 2.9
+
+  galaxy_tags:
+    - PAM
+    - Vault
+    - Forti
+
+dependencies: []

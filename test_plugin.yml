@@ -1,0 +1,28 @@
+- name: Test the fortipam_secret lookup with several fields
+  hosts: localhost
+  gather_facts: false
+  vars:
+    # This matches the name of the credential in the GUI, you can also pass a
+    # numeric ID, EG 8, in which case it will not get looked up but used as-is
+    credential_name: Hugo
+  # environment:
+    # These must be in the environment to configure and authenticate the plugin
+    # FORTIPAM_INSTANCE: https://<my_fortipam_instance>
+
+    # Token for an "API user" that the FortiPAM admin must create and provide
+    # FORTIPAM_TOKEN: <string token>
+  tasks:
+    - name: In a ssh credential from FortiPAM, bring the Host field
+      ansible.builtin.debug:
+        msg: "Host is: {{ lookup('fortipam_secret', credential_name, field='Host', validate_certs=false) }}"
+      no_log: false  # set to false ONLY during testing
+
+    - name: In a ssh credential from FortiPAM, bring the Username field
+      ansible.builtin.debug:
+        msg: "Username is: {{ lookup('fortipam_secret', credential_name, field='Username', validate_certs=false) }}"
+      no_log: false  # set to false ONLY during testing
+
+    - name: Bring the default field (password)
+      ansible.builtin.debug:
+        msg: "Password in cleartext is: {{ lookup('fortipam_secret', credential_name, validate_certs=false) }}"
+      no_log: false  # set to false ONLY during testing

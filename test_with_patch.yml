@@ -1,0 +1,51 @@
+---
+# Fetch a FortiPAM secret using only ansible.builtin.uri, then apply the
+# retrieved username and password to all hosts in a pre-defined inventory
+# group via play-level vars.
+#
+# Required env vars on the controller:
+#   FORTIPAM_INSTANCE  e.g. https://pam.example.com:443
+#   FORTIPAM_TOKEN     API user's bearer token
+#
+- name: Fetch FortiPAM secret credentials
+  hosts: localhost
+  gather_facts: false
+  vars:
+    fpam_secret: "Hugo"
+    fpam_field: "Password"
+    fpam_instance: "{{ lookup('env', 'FORTIPAM_INSTANCE') }}"
+    fpam_token: "{{ lookup('env', 'FORTIPAM_TOKEN') }}"
+    fpam_skip_tls_verify: true
+
+  tasks:
+    - name: Get the FortiPAM secret and field - {{ fpam_secret }} - {{ fpam_field }}
+      ansible.builtin.include_role:
+        name: get_fortipam_secret
+      vars:
+        get_fortipam_secret_secret_name: "{{ fpam_secret }}"
+        get_fortipam_secret_secret_field: "{{ fpam_field }}"
+        get_fortipam_secret_skip_tls_verify: true
+
+    - name: Print the secret object
+      ansible.builtin.debug:
+        msg: Object is {{ get_fortipam_secret_full_array }}
+
+    - name: Print the extracted field
+      ansible.builtin.debug:
+        msg: 'Field cleartext is: {{ get_fortipam_secret_field_cleartext }}'
+
+- name: Apply FortiPAM-retrieved credentials to inventory targets
+  hosts: fpam_managed
+  gather_facts: false
+  vars:
+    ansible_user: "{{ hostvars['localhost'].fpam_username }}"
+    ansible_password: "{{ hostvars['localhost'].fpam_password }}"
+  tasks:
+    - name: Confirm we can run a command as the FortiPAM-stored user
+      ansible.builtin.command: id
+      register: id_out
+      changed_when: false
+
+    - name: Show the result
+      ansible.builtin.debug:
+        msg: "Connected to {{ inventory_hostname }} as: {{ id_out.stdout }}"

@@ -1,0 +1,6 @@
+---
+# defaults file for get_fortipam_secret
+fpam_secret: "{{ get_fortipam_secret_secret_name }}"
+fpam_instance: "{{ get_fortipam_secret_instance | default(lookup('env', 'FORTIPAM_INSTANCE')) }}"
+fpam_token: "{{ get_fortipam_secret_secret_token | default(lookup('env', 'FORTIPAM_TOKEN')) }}"
+fpam_skip_tls_verify: "{{ get_fortipam_secret_skip_tls_verify | default(false) }}"
