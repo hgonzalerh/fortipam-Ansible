@@ -60,4 +60,3 @@
       }}
     get_fortipam_secret_full_array: "{{ fpam_secret_record.json.results[0].field }}"
   no_log: true
-
