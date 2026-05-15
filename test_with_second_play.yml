@@ -61,10 +61,15 @@
     ansible_password: "{{ hostvars['localhost'].fpam_password }}"
   tasks:
     - name: Confirm we can run a command as the FortiPAM-stored user
-      ansible.builtin.command: id
-      register: id_out
-      changed_when: false
+      ansible.builtin.package: 
+        name: '*'
+        state: latest
 
-    - name: Show the result
-      ansible.builtin.debug:
-        msg: "Connected to {{ inventory_hostname }} as: {{ id_out.stdout }}"
+    # - name: Confirm we can run a command as the FortiPAM-stored user
+    #   ansible.builtin.command: id
+    #   register: id_out
+    #   changed_when: false
+
+    # - name: Show the result
+    #   ansible.builtin.debug:
+    #     msg: "Connected to {{ inventory_hostname }} as: {{ id_out.stdout }}"
