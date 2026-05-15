@@ -12,27 +12,46 @@
   gather_facts: false
   vars:
     fpam_secret: "Hugo"
-    fpam_field: "Password"
     fpam_instance: "{{ lookup('env', 'FORTIPAM_INSTANCE') }}"
     fpam_token: "{{ lookup('env', 'FORTIPAM_TOKEN') }}"
     fpam_skip_tls_verify: true
 
   tasks:
-    - name: Get the FortiPAM secret and field - {{ fpam_secret }} - {{ fpam_field }}
+    - name: Get the FortiPAM secret and field Username
       ansible.builtin.include_role:
         name: get_fortipam_secret
       vars:
         get_fortipam_secret_secret_name: "{{ fpam_secret }}"
-        get_fortipam_secret_secret_field: "{{ fpam_field }}"
+        get_fortipam_secret_secret_field: "Username"
         get_fortipam_secret_skip_tls_verify: true
+
+    - name: Print the extracted field Username
+      ansible.builtin.debug:
+        msg: 'Field cleartext is: {{ get_fortipam_secret_field_cleartext }}'
+
+    - name: Save username for next play
+      ansible.builtin.set_fact:
+        fpam_username: "{{ get_fortipam_secret_field_cleartext }}"
+
+    - name: Get the FortiPAM secret and field Password
+      ansible.builtin.include_role:
+        name: get_fortipam_secret
+      vars:
+        get_fortipam_secret_secret_name: "{{ fpam_secret }}"
+        get_fortipam_secret_secret_field: "Password"
+        get_fortipam_secret_skip_tls_verify: true
+
+    - name: Print the extracted field Password
+      ansible.builtin.debug:
+        msg: 'Field cleartext is: {{ get_fortipam_secret_field_cleartext }}'
+
+    - name: Save password for next play
+      ansible.builtin.set_fact:
+        fpam_password: "{{ get_fortipam_secret_field_cleartext }}"
 
     - name: Print the secret object
       ansible.builtin.debug:
         msg: Object is {{ get_fortipam_secret_full_array }}
-
-    - name: Print the extracted field
-      ansible.builtin.debug:
-        msg: 'Field cleartext is: {{ get_fortipam_secret_field_cleartext }}'
 
 - name: Apply FortiPAM-retrieved credentials to inventory targets
   hosts: fpam_managed
